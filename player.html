@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="utf-8">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <title>牛牛经验</title>
+    <script src="https://s4.zstatic.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+</head>
+
+<body>
+    <div style="flex: 1; padding: 20px; overflow-y: auto; display: block;" id="showMarketDataPage">
+        <h2 style="text-align: center;">牛牛经验</h2>
+        <div style="width: 100%;display: flex;">
+            <div style="width: 30%;">
+                <div style="display:inline-block;">更新时间:</div>
+                <div style="display:inline-block;" id="updateAt"></div>
+            </div>
+            <div style="width: 40%;text-align: center;display: flex;">
+                <div style="width: 30%;"></div>
+                <div style="width: 30%;">
+                    <label>全部玩家:</label>
+                    <input type="checkbox" id="allPlayer">
+                </div>
+                <div style="width: 40%;text-align: left;">
+                    <lable id="currentNum"></lable>
+                </div>
+            </div>
+            <div style="width: 30%;text-align: right;">
+                <a href="./party.html" style="color: white;text-decoration: none;">牛牛组队</a>
+                <div style="display:inline-block;">&nbsp;&nbsp;</div>
+                <a href="https://greasyfork.org/scripts/536234" target="_blank"
+                    style="color: white;text-decoration: none;">插件</a>
+            </div>
+        </div>
+        <div class="pie-chart">
+            <div class="pie-chart-item" id="skillChart"></div>
+            <div class="pie-chart-item" id="roleChart"></div>
+        </div>
+        <table class="dataList-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>序号</th>
+                    <th data-sort="name" onclick=changeSort(this)>玩家</th>
+                    <th data-sort="role" onclick=changeSort(this)>职业</th>
+                    <th data-sort="ranged" onclick=changeSort(this)>远程</th>
+                    <th data-sort="rangedHour" onclick=changeSort(this)>远程每小时</th>
+                    <th data-sort="attack" onclick=changeSort(this)>攻击</th>
+                    <th data-sort="attackHour" onclick=changeSort(this)>攻击每小时</th>
+                    <th data-sort="power" onclick=changeSort(this)>近战</th>
+                    <th data-sort="powerHour" onclick=changeSort(this)>近战每小时</th>
+                    <th data-sort="magic" onclick=changeSort(this)>魔法</th>
+                    <th data-sort="magicHour" onclick=changeSort(this)>魔法每小时</th>
+                    <th data-sort="overTime">赶超时间</th>
+                </tr>
+            </thead>
+            <tbody id="dataTableBody">
+                <!-- 数据表会在这里插入 -->
+            </tbody>
+        </table>
+        <div style="text-align: center;margin-top: 20px;">
+            <button id="prevPageBtn" style="padding: 5px 10px; margin: 0 5px;">上一页</button>
+            <span id="currentPageDisplay">第 1 页</span>
+            <button id="nextPageBtn" style="padding: 5px 10px; margin: 0 5px;">下一页</button>
+            <label style="margin-left: 10px;">
+                每页显示
+                <input id="rowsPerPageInput" type="number" value="2000" min="1"
+                    style="width: 50px; text-align: center;">
+                行
+            </label>
+            <label style="margin-left: 10px;">
+                跳转到
+                <input id="gotoPageInput" type="number" min="1" style="width: 50px; text-align: center;">
+                页
+                <button id="gotoPageBtn" style="padding: 5px 10px; margin-left: 5px;">跳转</button>
+            </label>
+        </div>
+    </div>
+</body>
+<script>
+    let niuniu = {
+        playerData: null,
+        updateAt: "",
+        data: [],
+        sortBy: "ranged",
+        asc: 1,
+        currentPage: 1,
+        rowsPerPage: 2000,
+        totalPages: 1,
+        allPlayer: false,
+    }
+    if (localStorage.getItem("allPlayer") === "true") {
+        document.getElementById('allPlayer').checked = true
+        niuniu.allPlayer = true;
+    }
+    function showData() {
+        document.getElementById('updateAt').innerText = niuniu.updateAt;
+        niuniu.data.sort(function (a, b) {
+            if (["name", "role"].includes(niuniu.sortBy)) {
+                return (a[niuniu.sortBy]).localeCompare(b[niuniu.sortBy]) * niuniu.asc;
+            }
+            return b[niuniu.sortBy] - a[niuniu.sortBy];
+        })
+        const tableBody = document.getElementById('dataTableBody');
+
+        let overTimeFlag = false;
+        if (["ranged", "attack", "power", "magic",].includes(niuniu.sortBy)) {
+            overTimeFlag = true;
+        }
+
+        let currentShowData = niuniu.data;
+        if (!niuniu.allPlayer) {
+            currentShowData = currentShowData.filter(item => {
+                return item.selfReport
+            })
+        }
+        document.getElementById('currentNum').innerText = currentShowData.length;
+        setTimeout(showChart, 100, currentShowData);
+
+
+        const startIndex = (niuniu.currentPage - 1) * niuniu.rowsPerPage;
+        const endIndex = startIndex + niuniu.rowsPerPage;
+        niuniu.totalPages = Math.ceil(currentShowData.length / niuniu.rowsPerPage);
+        document.getElementById('currentPageDisplay').textContent = `第 ${niuniu.currentPage} 页 / 共 ${niuniu.totalPages} 页`;
+        document.getElementById('prevPageBtn').disabled = niuniu.currentPage === 1;
+        document.getElementById('nextPageBtn').disabled = niuniu.currentPage === niuniu.totalPages;
+        document.getElementById('rowsPerPageInput').value = niuniu.rowsPerPage;
+        const paginatedData = currentShowData.slice(startIndex, endIndex);
+        tableBody.innerHTML = paginatedData.map((row, index) => {
+            const lastRow = index > 0 ? currentShowData[index - 1] : null;
+            return `
+                <tr data-index="${startIndex + index}" style="text-align: center;">
+                    <td>${startIndex + index + 1}</td>
+                    <td>${row.name}</td>
+                    <td>${row.role}</td>
+                    <td>${numberFormat(row.ranged)}</td>
+                    <td>${numberFormat(row.rangedHour)}</td>
+                    <td>${numberFormat(row.attack)}</td>
+                    <td>${numberFormat(row.attackHour)}</td>
+                    <td>${numberFormat(row.power)}</td>
+                    <td>${numberFormat(row.powerHour)}</td>
+                    <td>${numberFormat(row.magic)}</td>
+                    <td>${numberFormat(row.magicHour)}</td>
+                    <td>${(index > 0 && overTimeFlag) ? getOverTiem(lastRow, row) : ""}</td>
+                </tr>
+                `;
+        }).join('');
+
+    }
+    function getOverTiem(lastRow, row) {
+        const sortByHour = niuniu.sortBy + "Hour";
+        if (row[sortByHour] === -1) {
+            return "∞"
+        }
+        const speed = row[sortByHour] - (lastRow[sortByHour] === -1 ? 0 : lastRow[sortByHour]);
+        if ((speed > 0.1) && (lastRow[niuniu.sortBy] - row[niuniu.sortBy] > 0)) {
+            let result = ""
+            let overTime = (lastRow[niuniu.sortBy] - row[niuniu.sortBy]) / speed * 60 * 60;//单位:秒
+            /*
+            if (overTime > 31536000) {
+                result += parseInt(overTime / 31536000) + "年";
+                result += parseInt((overTime % 31536000) / 86400) + "天"
+            } else
+             */
+            if (overTime > 86400) {
+                result += parseInt(overTime / 86400) + "天";
+                result += parseInt((overTime % 86400) / 3600) + "小时";
+            } else {
+                if (overTime > 3600) result += parseInt(overTime / 3600) + "小时";
+                result += parseInt((overTime % 3600) / 60) + "分钟";
+            }
+            return result;
+        }
+
+        return "∞"
+    }
+    function numberFormat(n) {
+        if (n === -1) {
+            return "";
+        }
+        return n.toFixed().toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+
+    fetch('/api/player')
+        .then(response => response.json())
+        .then(data => { niuniu.playerData = data; resolveData(); })
+        .catch(error => { console.error(error) });
+
+
+    function resolveData() {
+        niuniu.updateAt = new Date(niuniu.playerData.updateAt + "Z").toLocaleString();
+        const timeNow = new Date();
+        const timeNowUTC = timeNow.getTime() + timeNow.getTimezoneOffset() * 60000;
+        for (const item of niuniu.playerData.data) {
+            let player = {};
+            player.name = item[0];
+            player.role = getRole(item[1])
+            player.selfReport = (item[6] === 1);
+            player = { ...player, ...{ rangedHour: -1, attackHour: -1, powerHour: -1, magicHour: -1, } }
+            let skill = item[2].split(",");
+            player = { ...player, ...{ rangedReal: Number(skill[0]), attackReal: Number(skill[1]), powerReal: Number(skill[2]), magicReal: Number(skill[3]), } }
+            let skillOld = item[4].split(",");
+            let updateAt = Date.parse(item[3]);
+            let hourDiff = (updateAt - Date.parse(item[5])) / 3600000;
+            if ((hourDiff > 0.1) && (skill.length === 4) && (skillOld.length === 4)) {
+                player.rangedHour = (Number(skill[0]) - Number(skillOld[0])) / hourDiff
+                player.attackHour = (Number(skill[1]) - Number(skillOld[1])) / hourDiff
+                player.powerHour = (Number(skill[2]) - Number(skillOld[2])) / hourDiff
+                player.magicHour = (Number(skill[3]) - Number(skillOld[3])) / hourDiff
+            }
+            const hourNowOffset = timeNowUTC > updateAt ? (timeNowUTC - updateAt) / 3600000 : 0;
+            player = {
+                ...player, ...{
+                    ranged: player.rangedReal + hourNowOffset * (player.rangedHour > 0 ? player.rangedHour : 0),
+                    attack: player.attackReal + hourNowOffset * (player.attackHour > 0 ? player.attackHour : 0),
+                    power: player.powerReal + hourNowOffset * (player.powerHour > 0 ? player.powerHour : 0),
+                    magic: player.magicReal + hourNowOffset * (player.magicHour > 0 ? player.magicHour : 0),
+                }
+            };
+            if (player.rangedReal + player.attackReal + player.powerReal + player.magicReal < 791) continue;//战斗小于10级不展示
+            niuniu.data.push(player)
+        }
+        showData();
+    }
+    function getRole(weapon) {
+        if ((weapon === null) || (weapon === undefined)) {
+            return ""
+        } else if (["弓", "弩", "水法", "火法", "自然", "剑", "锤", "枪", "盾"].includes(weapon)) {
+            return weapon;
+        } else if (weapon?.includes("_bow") || ["gobo_shooter"].includes(weapon)) {
+            return "弓";
+        } else if (weapon?.includes("_crossbow") || [].includes(weapon)) {
+            return "弩";
+        } else if (weapon?.includes("_water_staff") || ["rippling_trident", "frost_staff"].includes(weapon)) {
+            return "水法";
+        } else if (weapon?.includes("_fire_staff") || ["gobo_boomstick", "blazing_trident", "infernal_battlestaff"].includes(weapon)) {
+            return "火法";
+        } else if (weapon?.includes("_nature_staff") || ["jackalope_staff", "blooming_trident"].includes(weapon)) {
+            return "自然";
+        } else if (weapon?.includes("_sword") || ["gobo_slasher", "werewolf_slasher"].includes(weapon)) {
+            if (weapon === "cheese_sword") return "";//排除新手村武器奶酪剑
+            return "剑";
+        } else if (weapon?.includes("_mace") || ["gobo_smasher", "granite_bludgeon", "chaotic_flail"].includes(weapon)) {
+            return "锤";
+        } else if (weapon?.includes("_spear") || ["gobo_stabber"].includes(weapon)) {
+            return "枪";
+        } else if (weapon?.includes("_bulwark")) {
+            return "盾";
+        }
+        return "";
+    }
+    function changeSort(event) {
+        if (event && event.getAttribute("data-sort")) {
+            niuniu.sortBy = event.getAttribute("data-sort");
+        }
+        if (["name", "role"].includes(niuniu.sortBy)) {
+            niuniu.asc *= -1
+        }
+        niuniu.currentPage = 1;
+        showData();
+    }
+
+
+    function showChart(data) {
+        let skillChartData = {
+            "远程": 0,
+            "近战": 0,
+            "法师": 0,
+        };
+        let roleChartData = {
+            "弓": 0,
+            "弩": 0,
+            "水法": 0,
+            "火法": 0,
+            "自然": 0,
+            "剑": 0,
+            "锤": 0,
+            "枪": 0,
+            "盾": 0
+        };
+
+        for (const item of data) {
+            // 每小时经验大于0 || 技能不小于100级并且其他职业每小时经验不大于0
+            if (["弓", "弩"].includes(item.role)) {
+                skillChartData["远程"] += 1;
+            } else if (["剑", "锤", "枪", "盾"].includes(item.role)) {
+                skillChartData["近战"] += 1;
+            } else if (["水法", "火法", "自然"].includes(item.role)) {
+                skillChartData["法师"] += 1;
+            } else if ((item.rangedHour > 0) || ((item.ranged >= 10000000) && (item.powerHour <= 0) && (item.magicHour <= 0))) {
+                skillChartData["远程"] += 1;
+            } else if ((item.powerHour > 0) || ((item.power >= 10000000) && (item.rangedHour <= 0) && (item.magicHour <= 0))) {
+                skillChartData["近战"] += 1;
+            } else if ((item.magicHour > 0) || ((item.magic >= 10000000) && (item.rangedHour <= 0) && (item.powerHour <= 0))) {
+                skillChartData["法师"] += 1;
+            }
+
+            // 使用对应职业武器，没有武器的不记录
+            if (item.role.length > 0) {
+                roleChartData[item.role] += 1;
+            }
+
+        }
+
+        pieEcharts({ id: "skillChart", titletext: "技能", data: skillChartData });
+        pieEcharts({ id: "roleChart", titletext: "职业", data: roleChartData });
+
+    }
+
+    function pieEcharts(charData) {
+        let data = [];
+        let sum = 0;
+        for (const item in charData.data) {
+            //if (charData.data[item] === 0) continue;
+            data.push({ "value": charData.data[item], "name": item });
+            sum += charData.data[item];
+        }
+        var chartDom = document.getElementById(charData.id);
+        var myChart = echarts.init(chartDom);
+        var option;
+        option = {
+            title: {
+                //text: charData.titletext,
+                subtext: sum,
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'item',
+                formatter: function (param) {
+                    return param.marker + " " + param.name + "：" + param.value;
+                }
+            },
+            legend: {
+                show: false,
+                orient: 'vertical',
+                left: 'left'
+            },
+            series: [
+                {
+                    //name: 'Access From',
+                    type: 'pie',
+                    show: true,
+                    radius: '50%',
+                    data: data.sort(function (a, b) {
+                        return b.value - a.value;
+                    }),
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    },
+                    itemStyle: {
+                        normal: {
+                            label: {
+                                show: true,
+                                color: "white",
+                                formatter: function (param) {
+                                    return param.name + "：" + param.value + " (" + param.percent + "%)";
+                                }
+                            },
+                            labelLine: {
+                                show: true
+                            }
+                        }
+                    }
+                }
+            ]
+        };
+
+        option && myChart.setOption(option);
+    }
+
+
+    document.getElementById('allPlayer').addEventListener('change', (event) => {
+        niuniu.allPlayer = event.target.checked;
+        localStorage.setItem("allPlayer", niuniu.allPlayer)
+        niuniu.currentPage = 1;
+        showData();
+    });
+    document.getElementById('prevPageBtn').addEventListener('click', () => {
+        if (niuniu.currentPage > 1) {
+            niuniu.currentPage--;
+            showData();
+        }
+    });
+
+    document.getElementById('nextPageBtn').addEventListener('click', () => {
+        if (niuniu.currentPage < niuniu.totalPages) {
+            niuniu.currentPage++;
+            showData();
+        }
+    });
+
+    document.getElementById('rowsPerPageInput').addEventListener('change', (event) => {
+        const newRowsPerPage = parseInt(event.target.value, 10);
+        if (newRowsPerPage > 0) {
+            niuniu.rowsPerPage = newRowsPerPage;
+            niuniu.currentPage = 1; // 重置到第一页
+            showData();
+        }
+    });
+    document.getElementById('gotoPageBtn').addEventListener('click', () => {
+        const gotoPageInput = document.getElementById('gotoPageInput');
+        let page = parseInt(gotoPageInput.value, 10);
+        if (isNaN(page) || page < 1) page = 1;
+        if (page > niuniu.totalPages) page = niuniu.totalPages;
+        niuniu.currentPage = page;
+        showData();
+    });
+
+</script>
+<style>
+    * {
+        scrollbar-color: #98a7e9 #20212f;
+        scrollbar-width: thin;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    html {
+        width: 100vw;
+        height: 100vh;
+        background: rgb(52, 64, 122);
+        background: linear-gradient(180deg, rgba(52, 64, 122, 1) 0%, rgba(24, 25, 34, 1) 15%);
+    }
+
+    body {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        --justify-content: center;
+        --align-items: center;
+        color: white;
+        width: 100%;
+        height: 100%;
+        padding: 1%;
+        overflow: hidden;
+    }
+
+    .dataList-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .dataList-table,
+    .dataList-table th,
+    .dataList-table td {
+        border: 1px solid #000000;
+    }
+
+    .dataList-table th,
+    .dataList-table td {
+        padding: 10px;
+        text-align: center;
+    }
+
+    .dataList-table th {
+        --background-color: #f2f2f2;
+        cursor: pointer;
+    }
+
+    .dataList-table tr:nth-child(2n) {
+        background-color: #20212f;
+    }
+
+    .dataList-table tr:nth-child(2n+1) {
+        background-color: #191a24;
+    }
+
+    .pie-chart-item {
+        height: 300px;
+        width: 33%;
+    }
+
+    .pie-chart {
+        display: flex;
+        justify-content: center;
+        width: auto;
+    }
+
+    @media screen and (max-width: 1200px) {
+        .pie-chart {
+            display: grid;
+            justify-content: center;
+            width: auto;
+        }
+
+        .pie-chart-item {
+            height: 300px;
+            width: 600px;
+        }
+    }
+</style>
+
+</html>

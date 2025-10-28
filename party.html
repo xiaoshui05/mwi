@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="utf-8">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <title>牛牛组队</title>
+    <script src="https://s4.zstatic.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+</head>
+
+<body>
+    <div style="flex: 1; padding: 20px; overflow-y: auto; display: block;" id="showMarketDataPage">
+        <h2 style="text-align: center;">牛牛组队</h2>
+        <div style="width: 100%;display: flex;">
+            <div style="width: 30%;">
+                <div style="display:inline-block;">更新时间:</div>
+                <div style="display:inline-block;" id="updateAt"></div>
+            </div>
+            <div style="width: 40%;text-align: center;">
+                <div style="display:inline-block;">
+                    <label>T3+:</label>
+                    <input type="checkbox" id="elite" onchange="selectChange(this)">
+                </div>
+                <div style="display:inline-block;">
+                    <label>地牢:</label>
+                    <input type="checkbox" id="dungeons" onchange="selectChange(this)">
+                </div>
+            </div>
+            <div style="width: 30%;text-align: right;">
+                <a href="https://xprework.cnnewnew.top/" target="_blank"
+                    style="color: white;text-decoration: none;">模拟大赛</a>
+                <div style="display:inline-block;">&nbsp;&nbsp;</div>
+                <a href="./player.html" style="color: white;text-decoration: none;">牛牛经验</a>
+                <div style="display:inline-block;">&nbsp;&nbsp;</div>
+                <a href="https://greasyfork.org/scripts/536234" target="_blank"
+                    style="color: white;text-decoration: none;">插件</a>
+            </div>
+        </div>
+        <div class="pie-chart">
+            <div class="pie-chart-item" id="eliteChart"></div>
+            <div class="pie-chart-item" id="mapAllChart"></div>
+            <div class="pie-chart-item" id="dungeonsChart"></div>
+        </div>
+        <table class="dataList-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th data-sort="mapName" onclick=changeSort()>地图</th>
+                    <th data-sort="">难度</th>
+                    <th data-sort="">人数</th>
+                    <th data-sort="">队伍配置</th>
+                </tr>
+            </thead>
+            <tbody id="partyDataTableBody">
+                <!-- 数据表会在这里插入 -->
+            </tbody>
+        </table>
+        <div id="scriptCheck" style="text-align: center;"></div>
+    </div>
+</body>
+<script>
+    let niuniu = {
+        partyData: null,
+        playerData: null,
+        reqError: false,
+        updateAt: "",
+        data: [],
+        sortBy: 1,
+    }
+    function showData() {
+        var onlyElite = document.getElementById('elite').checked;
+        var OnlyDungeons = document.getElementById('dungeons').checked;
+        document.getElementById('updateAt').innerText = niuniu.updateAt;
+
+        niuniu.data.sort(function (a, b) {
+            if (b.mapNum - a.mapNum == 0) {
+                return (b.mapDifficultyTier - a.mapDifficultyTier) * niuniu.sortBy
+            }
+            return (b.mapNum - a.mapNum) * niuniu.sortBy
+        })
+
+
+        const tableBody = document.getElementById('partyDataTableBody');
+        tableBody.innerHTML = niuniu.data.map((row, index) => {
+            if (onlyElite && row.elite !== onlyElite) return "";
+            else if (OnlyDungeons && row.dungeons !== OnlyDungeons) return "";
+
+            return `
+                <tr data-index="${index}" style="text-align: center;">
+                    <td>${row.mapName}</td>
+                    <td>${row.mapDifficultyTier == -1 ? "?" : "T" + row.mapDifficultyTier}</td>
+                    <td>${row.num}</td>
+                    <td>${row.players}</td>
+                </tr>
+                `;
+        }).join('');
+
+    }
+    function changeSort() {
+        if (niuniu.data.length === 0) return;
+        niuniu.sortBy *= -1;
+        showData();
+    }
+
+    function fetchData() {
+        fetch('/api/party')
+            .then(response => response.json())
+            .then(data => { niuniu.partyData = data; resolveData(); })
+            .catch(error => { console.error(error); niuniu.reqError = true; });
+
+        fetch('/api/player')
+            .then(response => response.json())
+            .then(data => { niuniu.playerData = data; resolveData(); })
+            .catch(error => { console.error(error); niuniu.reqError = true; });
+    }
+    const niuniu_0xa2c2a_shop_auth = "2025-08-19";
+    if (niuniu_0xa2c2a_shop_auth === localStorage.getItem("niuniu_0xa2c2a_shop_auth")) {
+        fetchData();
+    } else {
+        setTimeout(() => {
+            const temp = localStorage.getItem("niuniu_0xa2c2a_shop_auth");
+            if (niuniu_0xa2c2a_shop_auth === temp) {
+                fetchData();
+            } else {
+                document.getElementById("scriptCheck").innerHTML = `
+                    <h2>
+                        需要${temp ? "更新" : "贡献"}。
+                    </h2>
+                    `;
+                const pieChartHidden = document.createElement('style');
+                pieChartHidden.innerHTML = `.pie-chart {height: 50px !important;}`;
+                document.head.appendChild(pieChartHidden);
+            }
+        }, 500);
+    }
+
+    function resolveData() {
+        if (niuniu.reqError || (niuniu.partyData === null) || (niuniu.playerData === null) || (Object.keys(niuniu.playerData).length === 0) || (Object.keys(niuniu.partyData).length === 0)) return;
+        niuniu.updateAt = new Date(niuniu.partyData.updateAt + "Z").toLocaleString();
+
+        let playerWeapon = {};
+        for (const item of niuniu.playerData.data) {
+            playerWeapon[item[0]] = item[1]
+        }
+
+        niuniu.partyData.data.sort(function (a, b) {
+            return Date.parse(b[2]) - Date.parse(a[2])
+        })
+        let playerParty = {}
+        for (const item of niuniu.partyData.data) {
+            let noParty = true;
+            var players = item[0].split(",")
+            var dataPlayers = ``;
+            var playerPartyTemp = {};
+            for (const item of players) {
+                if (playerParty[item]) {
+                    noParty = false;
+                    break;
+                }
+                playerPartyTemp[item] = true;
+                dataPlayers += `<div style="display:inline-block;">${getIco(playerWeapon[item])}${item}</div>`
+
+            }
+            if (!noParty) continue;
+            playerParty = { ...playerParty, ...playerPartyTemp };
+            var map = item[1]
+            niuniu.data.push({ "id": item[0], ...getMapInfo(map), "players": dataPlayers, "num": players.length, });
+        }
+
+        showData();
+        setTimeout(showChart, 100, niuniu.data);
+    }
+    function getIco(weapon) {
+        let weaponID = getRole(weapon);
+        let weaponToID = {
+            "弩": "sundering_crossbow",
+            "弓": "cursed_bow",
+            "水法": "rippling_trident",
+            "火法": "blazing_trident",
+            "自然": "blooming_trident",
+            "剑": "regal_sword",
+            "锤": "chaotic_flail",
+            "枪": "furious_spear",
+            "盾": "griffin_bulwark",
+        };
+        return `<svg width="20" height="20" style="vertical-align: middle;"><use xlink:href="weapon.svg#${weaponToID[weaponID]}"></use></svg>`;
+    }
+    function getRole(weapon) {
+        if ((weapon === null) || (weapon === undefined)) {
+            return ""
+        } else if (["弓", "弩", "水法", "火法", "自然", "剑", "锤", "枪", "盾"].includes(weapon)) {
+            return weapon;
+        } else if (weapon?.includes("_bow") || ["gobo_shooter"].includes(weapon)) {
+            return "弓";
+        } else if (weapon?.includes("_crossbow") || [].includes(weapon)) {
+            return "弩";
+        } else if (weapon?.includes("_water_staff") || ["rippling_trident", "frost_staff"].includes(weapon)) {
+            return "水法";
+        } else if (weapon?.includes("_fire_staff") || ["gobo_boomstick", "blazing_trident", "infernal_battlestaff"].includes(weapon)) {
+            return "火法";
+        } else if (weapon?.includes("_nature_staff") || ["jackalope_staff", "blooming_trident"].includes(weapon)) {
+            return "自然";
+        } else if (weapon?.includes("_sword") || ["gobo_slasher", "werewolf_slasher"].includes(weapon)) {
+            if (weapon === "cheese_sword") return "";//排除新手村武器奶酪剑
+            return "剑";
+        } else if (weapon?.includes("_mace") || ["gobo_smasher", "granite_bludgeon", "chaotic_flail"].includes(weapon)) {
+            return "锤";
+        } else if (weapon?.includes("_spear") || ["gobo_stabber"].includes(weapon)) {
+            return "枪";
+        } else if (weapon?.includes("_bulwark")) {
+            return "盾";
+        }
+        return "";
+    }
+
+
+    const mapT = {
+        "Smelly Planet": "臭臭星球",
+        "Swamp Planet": "沼泽星球",
+        "Aqua Planet": "海洋星球",
+        "Jungle Planet": "丛林星球",
+        "Gobo Planet": "哥布林星球",
+        "Planet Of The Eyes": "眼球星球",
+        "Sorcerers Tower": "巫师之塔",
+        "Bear With It": "熊熊星球",
+        "Golem Cave": "魔像洞穴",
+        "Twilight Zone": "暮光之地",
+        "Infernal Abyss": "地狱深渊",
+        "Chimerical Den": "奇幻洞穴", "Sinister Circus": "邪恶马戏团", "Enchanted Fortress": "秘法要塞", "Pirate Cove": "海盗湾",
+    }
+    function getMapInfo(map) {
+        let difficultyTier = -1;
+        let mapName = map.split("#")[0];
+
+        if (map.includes("#")) {
+            difficultyTier = Number(map.split("#")[1]);
+            if ((difficultyTier < 0) || (difficultyTier > 5)) {
+                difficultyTier = -1;
+            }
+        }
+        let dungeons = ["chimerical_den", "sinister_circus", "enchanted_fortress", "pirate_cove"].includes(mapName);
+        let elite = difficultyTier >= 3;
+        let index = 0;
+        for (const k in mapT) {
+            index++;
+            if (k.toLowerCase() === mapName.replaceAll("_", " "))
+                return { "mapName": mapT[k], "mapNum": index, "mapDifficultyTier": difficultyTier, "elite": elite, "dungeons": dungeons };
+        }
+        return { "mapName": mapName, "mapNum": -1, "mapDifficultyTier": difficultyTier, "elite": elite, "dungeons": dungeons };
+    }
+    function selectChange(event) {
+        if (event.checked) {
+            if (event.id == "elite") {
+                document.getElementById('dungeons').checked = false;
+            } else {
+                document.getElementById('elite').checked = false;
+            }
+        }
+        showData()
+    }
+    function showChart(data) {
+        let dungeons = {};
+        let elite = {};
+        let mapAll = {};
+
+        for (item of data) {
+            if (item.dungeons) {
+                dungeons[item.mapName] = getDataCount(dungeons, item);
+            } else {
+                mapAll[item.mapName] = getDataCount(mapAll, item);
+                if (item.elite) {
+                    elite[item.mapName] = getDataCount(elite, item);
+                }
+            }
+        }
+
+        pieEcharts({ id: "dungeonsChart", titletext: "地牢", data: dungeons });
+        pieEcharts({ id: "eliteChart", titletext: "T3+", data: elite });
+        pieEcharts({ id: "mapAllChart", titletext: " ", data: mapAll });
+
+    }
+    function getDataCount(data, item) {
+        let num = data[item.mapName]?.num;
+        num = num === undefined ? 0 : num;
+        num += 1;
+        let playerNum = data[item.mapName]?.playerNum;
+        playerNum = playerNum === undefined ? 0 : playerNum;
+        playerNum += item.num;
+        return { num: num, playerNum: playerNum };
+    }
+
+    function pieEcharts(charData) {
+        let data = [];
+        let sum = 0;
+        let sumPlayer = 0;
+        for (const item in charData.data) {
+            data.push({ "value": charData.data[item].num, "name": item, "playerNum": charData.data[item].playerNum });
+            sum += charData.data[item].num;
+            sumPlayer += charData.data[item].playerNum
+        }
+        var chartDom = document.getElementById(charData.id);
+        var myChart = echarts.init(chartDom);
+        var option;
+        option = {
+            title: {
+                text: charData.titletext,
+                subtext: sum + "/" + sumPlayer,
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'item',
+                formatter: function (param) {
+                    return param.marker + " " + param.name + "：" + param.value + "/" + param.data.playerNum;
+                }
+            },
+            legend: {
+                show: false,
+                orient: 'vertical',
+                left: 'left'
+            },
+            series: [
+                {
+                    //name: 'Access From',
+                    type: 'pie',
+                    show: true,
+                    radius: '50%',
+                    data: data.sort(function (a, b) {
+                        return b.value - a.value;
+                    }),
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    },
+                    itemStyle: {
+                        normal: {
+                            label: {
+                                show: true,
+                                color: "white",
+                                formatter: function (param) {
+                                    return param.name + "：" + param.value + "/" + param.data.playerNum + " (" + param.percent + "%)";
+                                }
+                            },
+                            labelLine: {
+                                show: true
+                            }
+                        }
+                    }
+                }
+            ]
+        };
+
+        option && myChart.setOption(option);
+    }
+
+</script>
+<style>
+    * {
+        scrollbar-color: #98a7e9 #20212f;
+        scrollbar-width: thin;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    html {
+        width: 100vw;
+        height: 100vh;
+        background: rgb(52, 64, 122);
+        background: linear-gradient(180deg, rgba(52, 64, 122, 1) 0%, rgba(24, 25, 34, 1) 15%);
+    }
+
+    body {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        --justify-content: center;
+        --align-items: center;
+        color: white;
+        width: 100%;
+        height: 100%;
+        padding: 1%;
+        overflow: hidden;
+    }
+
+    .dataList-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .dataList-table,
+    .dataList-table th,
+    .dataList-table td {
+        border: 1px solid #000000;
+    }
+
+    .dataList-table th,
+    .dataList-table td {
+        padding: 10px;
+        text-align: center;
+    }
+
+    .dataList-table th {
+        --background-color: #f2f2f2;
+        cursor: pointer;
+    }
+
+    .dataList-table tr:nth-child(2n) {
+        background-color: #20212f;
+    }
+
+    .dataList-table tr:nth-child(2n+1) {
+        background-color: #191a24;
+    }
+
+    .pie-chart-item {
+        height: 300px;
+        width: 33%;
+    }
+
+    .pie-chart {
+        display: flex;
+        justify-content: center;
+        width: auto;
+    }
+
+    @media screen and (max-width: 1700px) {
+        .pie-chart {
+            display: grid;
+            justify-content: center;
+            width: auto;
+        }
+
+        .pie-chart-item {
+            height: 300px;
+            width: 600px;
+        }
+    }
+</style>
+
+</html>
